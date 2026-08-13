@@ -649,3 +649,492 @@ export function getRandomColor() {
 }
 
 export default botConfig;
+```js
+const {
+    Client,
+    GatewayIntentBits,
+    Partials,
+    EmbedBuilder,
+    AuditLogEvent
+} = require("discord.js");
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildPresences
+    ],
+    partials: [
+        Partials.Message,
+        Partials.Channel,
+        Partials.GuildMember
+    ]
+});
+
+// ================================
+// CONFIGURATION
+// ================================
+
+const TOKEN = process.env.DISCORD_TOKEN;
+
+// Put your logging channel ID here.
+// Example: "123456789012345678"
+const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
+
+// ================================
+// LOGGING FUNCTION
+// ================================
+
+async function logEvent(guild, title, description, color = 0x5865F2) {
+    if (!guild) return;
+
+    const channel = guild.channels.cache.get(LOG_CHANNEL_ID);
+
+    if (!channel) {
+        console.log(`[LOGGER] Log channel not found in ${guild.name}`);
+        return;
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(description)
+        .setColor(color)
+        .setTimestamp()
+        .setFooter({
+            text: `${guild.name} • Server Logger`
+        });
+
+    try {
+        await channel.send({ embeds: [embed] });
+    } catch (error) {
+        console.error("[LOGGER] Failed to send log:", error);
+    }
+}
+
+// ================================
+// BOT READY
+// ================================
+
+client.once("ready", () => {
+    console.log(`Logged in as ${client.user.tag}`);
+    console.log(`Logging server events...`);
+});
+
+// ================================
+// MEMBER JOIN
+// ================================
+
+client.on("guildMemberAdd", async member => {
+    await logEvent(
+        member.guild,
+        "👤 Member Joined",
+        `**User:** ${member.user.tag}\n**ID:** \`${member.id}\``,
+        0x57F287
+    );
+});
+
+// ================================
+// MEMBER LEAVE
+// ================================
+
+client.on("guildMemberRemove", async member => {
+    await logEvent(
+        member.guild,
+        "🚪 Member Left",
+        `**User:** ${member.user.tag}\n**ID:** \`${member.id}\``,
+        0xED4245
+    );
+});
+
+// ================================
+// MESSAGE DELETE
+// ================================
+
+client.on("messageDelete", async message => {
+    if (!message.guild) return;
+
+    const content = message.content || "*No message content available*";
+
+    await logEvent(
+        message.guild,
+        "🗑️ Message Deleted",
+        `**Author:** ${message.author?.tag || "Unknown"}\n` +
+        `**Channel:** ${message.channel}\n` +
+        `**Message ID:** \`${message.id}\`\n\n` +
+        `**Content:**\n${content.substring(0, 1000)}`,
+        0xED4245
+    );
+});
+
+// ================================
+// MESSAGE EDIT
+// ================================
+
+client.on("messageUpdate", async (oldMessage, newMessage) => {
+    if (!oldMessage.guild) return;
+    if (oldMessage.author?.bot) return;
+
+    if (oldMessage.content === newMessage.content) return;
+
+    await logEvent(
+        oldMessage.guild,
+        "✏️ Message Edited",
+        `**Author:** ${oldMessage.author?.tag || "Unknown"}\n` +
+        `**Channel:** ${oldMessage.channel}\n` +
+        `**Message:** [Jump to message](${newMessage.url})\n\n` +
+        `**Before:**\n${(oldMessage.content || "*Empty*").substring(0, 500)}\n\n` +
+        `**After:**\n${(newMessage.content || "*Empty*").substring(0, 500)}`,
+        0xFEE75C
+    );
+});
+
+// ================================
+// CHANNEL CREATE
+// ================================
+
+client.on("channelCreate", async channel => {
+    if (!channel.guild) return;
+
+    await logEvent(
+        channel.guild,
+        "📁 Channel Created",
+        `**Channel:** ${channel}\n` +
+        `**Name:** ${channel.name}\n` +
+        `**ID:** \`${channel.id}\``,
+        0x57F287
+    );
+});
+
+// ================================
+// CHANNEL DELETE
+// ================================
+
+client.on("channelDelete", async channel => {
+    if (!channel.guild) return;
+
+    await logEvent(
+        channel.guild,
+        "🗑️ Channel Deleted",
+        `**Name:** ${channel.name}\n` +
+        `**ID:** \`${channel.id}\``,
+        0xED4245
+    );
+});
+
+// ================================
+// CHANNEL UPDATE
+// ================================
+
+client.on("channelUpdate", async (oldChannel, newChannel) => {
+    if (!newChannel.guild) return;
+
+    let changes = [];
+
+    if (oldChannel.name !== newChannel.name) {
+        changes.push(
+            `**Name:** \`${oldChannel.name}\` → \`${newChannel.name}\``
+        );
+    }
+
+    if (oldChannel.topic !== newChannel.topic) {
+        changes.push(`**Topic changed**`);
+    }
+
+    if (changes.length === 0) return;
+
+    await logEvent(
+        newChannel.guild,
+        "📝 Channel Updated",
+        `**Channel:** ${newChannel}\n\n${changes.join("\n")}`,
+        0xFEE75C
+    );
+});
+
+// ================================
+// ROLE CREATE
+// ================================
+
+client.on("roleCreate", async role => {
+    await logEvent(
+        role.guild,
+        "🆕 Role Created",
+        `**Role:** ${role}\n` +
+        `**Name:** ${role.name}\n` +
+        `**ID:** \`${role.id}\``,
+        0x57F287
+    );
+});
+
+// ================================
+// ROLE DELETE
+// ================================
+
+client.on("roleDelete", async role => {
+    await logEvent(
+        role.guild,
+        "❌ Role Deleted",
+        `**Role:** ${role.name}\n` +
+        `**ID:** \`${role.id}\``,
+        0xED4245
+    );
+});
+
+// ================================
+// ROLE UPDATE
+// ================================
+
+client.on("roleUpdate", async (oldRole, newRole) => {
+    let changes = [];
+
+    if (oldRole.name !== newRole.name) {
+        changes.push(
+            `**Name:** \`${oldRole.name}\` → \`${newRole.name}\``
+        );
+    }
+
+    if (oldRole.color !== newRole.color) {
+        changes.push("**Color changed**");
+    }
+
+    if (changes.length === 0) return;
+
+    await logEvent(
+        newRole.guild,
+        "🔧 Role Updated",
+        `**Role:** ${newRole}\n\n${changes.join("\n")}`,
+        0xFEE75C
+    );
+});
+
+// ================================
+// MEMBER UPDATE
+// ================================
+
+client.on("guildMemberUpdate", async (oldMember, newMember) => {
+    let changes = [];
+
+    if (oldMember.nickname !== newMember.nickname) {
+        changes.push(
+            `**Nickname:** \`${oldMember.nickname || "None"}\` → \`${newMember.nickname || "None"}\``
+        );
+    }
+
+    const oldRoles = oldMember.roles.cache;
+    const newRoles = newMember.roles.cache;
+
+    const addedRoles = newRoles.filter(role => !oldRoles.has(role.id));
+    const removedRoles = oldRoles.filter(role => !newRoles.has(role.id));
+
+    if (addedRoles.size) {
+        changes.push(
+            `**Roles Added:** ${addedRoles.map(r => r).join(", ")}`
+        );
+    }
+
+    if (removedRoles.size) {
+        changes.push(
+            `**Roles Removed:** ${removedRoles.map(r => r.name).join(", ")}`
+        );
+    }
+
+    if (changes.length === 0) return;
+
+    await logEvent(
+        newMember.guild,
+        "👤 Member Updated",
+        `**User:** ${newMember.user.tag}\n\n${changes.join("\n")}`,
+        0xFEE75C
+    );
+});
+
+// ================================
+// BAN
+// ================================
+
+client.on("guildBanAdd", async ban => {
+    await logEvent(
+        ban.guild,
+        "🔨 Member Banned",
+        `**User:** ${ban.user.tag}\n` +
+        `**ID:** \`${ban.user.id}\``,
+        0xED4245
+    );
+});
+
+// ================================
+// UNBAN
+// ================================
+
+client.on("guildBanRemove", async ban => {
+    await logEvent(
+        ban.guild,
+        "🔓 Member Unbanned",
+        `**User:** ${ban.user.tag}\n` +
+        `**ID:** \`${ban.user.id}\``,
+        0x57F287
+    );
+});
+
+// ================================
+// VOICE STATE
+// ================================
+
+client.on("voiceStateUpdate", async (oldState, newState) => {
+    const member = newState.member || oldState.member;
+
+    if (!member) return;
+
+    // Joined voice
+    if (!oldState.channel && newState.channel) {
+        await logEvent(
+            member.guild,
+            "🔊 Joined Voice Channel",
+            `**User:** ${member.user.tag}\n` +
+            `**Channel:** ${newState.channel}`,
+            0x57F287
+        );
+    }
+
+    // Left voice
+    else if (oldState.channel && !newState.channel) {
+        await logEvent(
+            member.guild,
+            "🔇 Left Voice Channel",
+            `**User:** ${member.user.tag}\n` +
+            `**Channel:** ${oldState.channel}`,
+            0xED4245
+        );
+    }
+
+    // Moved voice channels
+    else if (
+        oldState.channel &&
+        newState.channel &&
+        oldState.channel.id !== newState.channel.id
+    ) {
+        await logEvent(
+            member.guild,
+            "🔀 Voice Channel Moved",
+            `**User:** ${member.user.tag}\n` +
+            `**From:** ${oldState.channel}\n` +
+            `**To:** ${newState.channel}`,
+            0x5865F2
+        );
+    }
+});
+
+// ================================
+// EMOJI UPDATE
+// ================================
+
+client.on("emojiCreate", async emoji => {
+    await logEvent(
+        emoji.guild,
+        "😀 Emoji Created",
+        `**Emoji:** ${emoji}\n` +
+        `**Name:** ${emoji.name}\n` +
+        `**ID:** \`${emoji.id}\``,
+        0x57F287
+    );
+});
+
+client.on("emojiDelete", async emoji => {
+    await logEvent(
+        emoji.guild,
+        "🗑️ Emoji Deleted",
+        `**Name:** ${emoji.name}\n` +
+        `**ID:** \`${emoji.id}\``,
+        0xED4245
+    );
+});
+
+// ================================
+// STICKER UPDATE
+// ================================
+
+client.on("stickerCreate", async sticker => {
+    await logEvent(
+        sticker.guild,
+        "🏷️ Sticker Created",
+        `**Name:** ${sticker.name}\n` +
+        `**ID:** \`${sticker.id}\``,
+        0x57F287
+    );
+});
+
+client.on("stickerDelete", async sticker => {
+    await logEvent(
+        sticker.guild,
+        "🗑️ Sticker Deleted",
+        `**Name:** ${sticker.name}\n` +
+        `**ID:** \`${sticker.id}\``,
+        0xED4245
+    );
+});
+
+// ================================
+// THREAD CREATE
+// ================================
+
+client.on("threadCreate", async thread => {
+    await logEvent(
+        thread.guild,
+        "🧵 Thread Created",
+        `**Thread:** ${thread.name}\n` +
+        `**ID:** \`${thread.id}\``,
+        0x57F287
+    );
+});
+
+// ================================
+// THREAD DELETE
+// ================================
+
+client.on("threadDelete", async thread => {
+    await logEvent(
+        thread.guild,
+        "🗑️ Thread Deleted",
+        `**Thread:** ${thread.name}\n` +
+        `**ID:** \`${thread.id}\``,
+        0xED4245
+    );
+});
+
+// ================================
+// SERVER UPDATE
+// ================================
+
+client.on("guildUpdate", async (oldGuild, newGuild) => {
+    let changes = [];
+
+    if (oldGuild.name !== newGuild.name) {
+        changes.push(
+            `**Name:** \`${oldGuild.name}\` → \`${newGuild.name}\``
+        );
+    }
+
+    if (oldGuild.icon !== newGuild.icon) {
+        changes.push("**Server icon changed**");
+    }
+
+    if (changes.length === 0) return;
+
+    await logEvent(
+        newGuild,
+        "⚙️ Server Updated",
+        changes.join("\n"),
+        0xFEE75C
+    );
+});
+
+// ================================
+// LOGIN
+// ================================
+
+client.login(TOKEN);
+```
+
