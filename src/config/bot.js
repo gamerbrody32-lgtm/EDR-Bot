@@ -1137,4 +1137,236 @@ client.on("guildUpdate", async (oldGuild, newGuild) => {
 
 client.login(TOKEN);
 ```
+```js
+const {
+    SlashCommandBuilder,
+    PermissionFlagsBits,
+    EmbedBuilder
+} = require("discord.js");
+
+const sqlite3 = require("sqlite3").verbose();
+
+// ================================
+// DATABASE
+// ================================
+
+const db = new sqlite3.Database("./database.sqlite");
+
+db.run(`
+    CREATE TABLE IF NOT EXISTS logging (
+        guild_id TEXT PRIMARY KEY,
+        channel_id TEXT
+    )
+`);
+
+// ================================
+// COMMAND
+// ================================
+
+const data = new SlashCommandBuilder()
+    .setName("logging")
+    .setDescription("Configure server event logging.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName("setup")
+            .setDescription("Set the channel where server events will be logged.")
+            .addChannelOption(option =>
+                option
+                    .setName("channel")
+                    .setDescription("The channel to send logs to.")
+                    .setRequired(true)
+            )
+    )
+
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName("disable")
+            .setDescription("Disable server logging.")
+    )
+
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName("status")
+            .setDescription("View the current logging configuration.")
+    );
+
+// ================================
+// COMMAND EXECUTION
+// ================================
+
+async function execute(interaction) {
+
+    if (!interaction.guild) {
+        return interaction.reply({
+            content: "❌ This command can only be used inside a server.",
+            ephemeral: true
+        });
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+
+    // ================================
+    // SETUP
+    // ================================
+
+    if (subcommand === "setup") {
+
+        const channel = interaction.options.getChannel("channel");
+
+        // Make sure it's a text-based channel
+        if (!channel.isTextBased()) {
+            return interaction.reply({
+                content: "❌ Please select a text-based channel.",
+                ephemeral: true
+            });
+        }
+
+        db.run(
+            `
+            INSERT INTO logging (guild_id, channel_id)
+            VALUES (?, ?)
+            ON CONFLICT(guild_id)
+            DO UPDATE SET channel_id = excluded.channel_id
+            `,
+            [interaction.guild.id, channel.id],
+            async error => {
+
+                if (error) {
+                    console.error(error);
+
+                    return interaction.reply({
+                        content: "❌ Something went wrong while saving the logging configuration.",
+                        ephemeral: true
+                    });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle("✅ Logging Enabled")
+                    .setDescription(
+                        `Server logging has been enabled.\n\n` +
+                        `**Log Channel:** ${channel}\n` +
+                        `**Channel ID:** \`${channel.id}\``
+                    )
+                    .setColor(0x57F287)
+                    .setTimestamp();
+
+                await interaction.reply({
+                    embeds: [embed]
+                });
+
+                // Test log
+                const testEmbed = new EmbedBuilder()
+                    .setTitle("📋 Logging System")
+                    .setDescription(
+                        `Logging has been successfully configured by ${interaction.user}.`
+                    )
+                    .setColor(0x5865F2)
+                    .setTimestamp();
+
+                await channel.send({
+                    embeds: [testEmbed]
+                });
+            }
+        );
+    }
+
+    // ================================
+    // DISABLE
+    // ================================
+
+    if (subcommand === "disable") {
+
+        db.run(
+            `DELETE FROM logging WHERE guild_id = ?`,
+            [interaction.guild.id],
+            async error => {
+
+                if (error) {
+                    console.error(error);
+
+                    return interaction.reply({
+                        content: "❌ Failed to disable logging.",
+                        ephemeral: true
+                    });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle("🔴 Logging Disabled")
+                    .setDescription(
+                        "Server event logging has been disabled."
+                    )
+                    .setColor(0xED4245)
+                    .setTimestamp();
+
+                await interaction.reply({
+                    embeds: [embed]
+                });
+            }
+        );
+    }
+
+    // ================================
+    // STATUS
+    // ================================
+
+    if (subcommand === "status") {
+
+        db.get(
+            `SELECT channel_id FROM logging WHERE guild_id = ?`,
+            [interaction.guild.id],
+            async (error, row) => {
+
+                if (error) {
+                    console.error(error);
+
+                    return interaction.reply({
+                        content: "❌ Failed to retrieve logging status.",
+                        ephemeral: true
+                    });
+                }
+
+                if (!row) {
+                    return interaction.reply({
+                        content: "🔴 Server logging is currently **disabled**.",
+                        ephemeral: true
+                    });
+                }
+
+                const channel =
+                    interaction.guild.channels.cache.get(row.channel_id);
+
+                if (!channel) {
+                    return interaction.reply({
+                        content:
+                            "⚠️ Logging is configured, but the configured channel no longer exists.",
+                        ephemeral: true
+                    });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle("📋 Logging Status")
+                    .setDescription(
+                        `**Status:** 🟢 Enabled\n` +
+                        `**Channel:** ${channel}\n` +
+                        `**Channel ID:** \`${channel.id}\``
+                    )
+                    .setColor(0x57F287)
+                    .setTimestamp();
+
+                await interaction.reply({
+                    embeds: [embed],
+                    ephemeral: true
+                });
+            }
+        );
+    }
+}
+
+module.exports = {
+    data,
+    execute
+};
+```
 
