@@ -1440,4 +1440,4 @@ async function deployCommands() {
 
 deployCommands();
 ```
-
+node deploy-commands.js
