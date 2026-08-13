@@ -1369,4 +1369,75 @@ module.exports = {
     execute
 };
 ```
+```js
+const {
+    REST,
+    Routes
+} = require("discord.js");
+
+require("dotenv").config();
+
+const commands = [
+    {
+        name: "logging",
+        description: "Configure server event logging.",
+        default_member_permissions: "32",
+        options: [
+            {
+                type: 1,
+                name: "setup",
+                description: "Set the channel where logs will be sent.",
+                options: [
+                    {
+                        type: 7,
+                        name: "channel",
+                        description: "The channel to send logs to.",
+                        required: true,
+                        channel_types: [0, 5]
+                    }
+                ]
+            },
+            {
+                type: 1,
+                name: "disable",
+                description: "Disable server event logging."
+            },
+            {
+                type: 1,
+                name: "status",
+                description: "View the current logging configuration."
+            }
+        ]
+    }
+];
+
+const rest = new REST({
+    version: "10"
+}).setToken(process.env.DISCORD_TOKEN);
+
+async function deployCommands() {
+
+    try {
+
+        console.log("Registering slash commands...");
+
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            {
+                body: commands
+            }
+        );
+
+        console.log("✅ Slash commands registered successfully!");
+
+    } catch (error) {
+
+        console.error("❌ Failed to register commands:");
+        console.error(error);
+
+    }
+}
+
+deployCommands();
+```
 
